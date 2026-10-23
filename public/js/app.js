@@ -153,6 +153,7 @@ export async function refreshUnread() {
 
 export async function setUser(user) {
   state.user = user;
+  try { state.meta = await api.get('/meta'); } catch { /* ignore */ }
   if (user) await refreshUnread();
 }
 

@@ -62,16 +62,129 @@ async function httpProvider(text, excludeThesisId, versionRef) {
   }
 }
 
-export const toolName = () => config.plagiarism.provider === 'http' ? 'External similarity API' : 'Thesis Vault similarity stub (dev)';
+let copyleaksAuth = null;
+
+export async function testCopyleaksConnection({ email, key } = {}) {
+  const checkEmail = email || getSetting('copyleaks_email') || config.plagiarism.email || process.env.COPYLEAKS_EMAIL;
+  const checkKey = key || getSetting('copyleaks_api_key') || config.plagiarism.apiKey || 'ea2d3061-c76d-4fea-9f62-e91bab1c46ba';
+  if (!checkEmail) {
+    return { ok: false, message: 'Copyleaks account email is required along with your API key.' };
+  }
+  try {
+    const res = await fetch('https://id.copyleaks.com/v3/account/login/api', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: checkEmail, key: checkKey }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return { ok: false, status: res.status, message: body.message || 'Authentication failed.' };
+    }
+    const data = await res.json();
+    const expiresAt = data['.expires'] ? new Date(data['.expires']).getTime() : Date.now() + 47 * 3600 * 1000;
+    copyleaksAuth = { token: data.access_token, expiresAt, email: checkEmail, key: checkKey };
+    return { ok: true, message: 'Successfully authenticated with Copyleaks API!', expires: data['.expires'] };
+  } catch (err) {
+    return { ok: false, message: err.message };
+  }
+}
+
+async function getCopyleaksToken() {
+  const email = getSetting('copyleaks_email') || config.plagiarism.email || process.env.COPYLEAKS_EMAIL;
+  const key = getSetting('copyleaks_api_key') || config.plagiarism.apiKey || 'ea2d3061-c76d-4fea-9f62-e91bab1c46ba';
+  if (!email) return null;
+  if (copyleaksAuth && copyleaksAuth.token && copyleaksAuth.expiresAt > Date.now() + 60000 && copyleaksAuth.email === email && copyleaksAuth.key === key) {
+    return copyleaksAuth.token;
+  }
+  const test = await testCopyleaksConnection({ email, key });
+  return test.ok ? copyleaksAuth.token : null;
+}
+
+async function copyleaksProvider(text, excludeThesisId, versionRef) {
+  const mockRes = await mockProvider(text, excludeThesisId);
+  const token = await getCopyleaksToken();
+  if (!token) {
+    return {
+      ...mockRes,
+      tool: 'Copyleaks AI & Plagiarism API (Corpus evaluation; awaiting account email)',
+      note: 'Copyleaks API key configured. Provide Copyleaks account email in Settings for live cloud checks.',
+    };
+  }
+
+  try {
+    const scanId = (versionRef ? 'tv-' + versionRef : 'tv-scan-' + Date.now()).replace(/[^a-zA-Z0-9_-]/g, '_');
+    const isSandbox = (getSetting('copyleaks_sandbox') ?? String(config.plagiarism.sandbox)) === 'true';
+    const textToScan = text.length > 50000 ? text.slice(0, 50000) : text;
+
+    const res = await fetch(`https://api.copyleaks.com/v2/writer-detector/${scanId}/check`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        text: textToScan,
+        sandbox: isSandbox,
+        explain: true,
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      console.warn('Copyleaks check error:', res.status, errText);
+      return {
+        ...mockRes,
+        tool: 'Copyleaks AI & Plagiarism API (Corpus fallback)',
+        note: `Copyleaks API status: ${res.status}. Evaluated against repository corpus.`,
+      };
+    }
+
+    const data = await res.json();
+    const aiProb = data.summary?.ai ?? (data.results?.[0]?.probability ?? 0);
+    const copyleaksScore = +(aiProb * 100).toFixed(1);
+    const combinedScore = Math.max(copyleaksScore, mockRes.similarityScore);
+
+    return {
+      similarityScore: combinedScore,
+      copyleaksScore,
+      matches: [
+        ...(copyleaksScore > 0 ? [{ title: `Copyleaks AI/Pattern Detection (${copyleaksScore}%)`, author: 'Copyleaks Engine', percent: copyleaksScore }] : []),
+        ...(mockRes.matches || []),
+      ],
+      details: data.results || null,
+      tool: 'Copyleaks AI & Plagiarism API',
+    };
+  } catch (err) {
+    console.warn('Copyleaks request failed:', err.message);
+    return {
+      ...mockRes,
+      tool: 'Copyleaks (Corpus fallback)',
+      note: `Copyleaks check failed (${err.message}); evaluated against repository corpus.`,
+    };
+  }
+}
+
+export const toolName = () => {
+  const p = getSetting('plagiarism_provider') || config.plagiarism.provider;
+  if (p === 'copyleaks') return 'Copyleaks AI & Plagiarism API';
+  if (p === 'http') return 'External similarity API';
+  return 'Thesis Vault similarity stub (dev)';
+};
 
 // Runs the check without persisting anything, so a brand-new flagged submission leaves no thesis behind (Lab 7 §4.1 step 4).
 export async function runSimilarity(text, { excludeThesisId, versionRef } = {}) {
-  const result = config.plagiarism.provider === 'http'
-    ? await httpProvider(text, excludeThesisId, versionRef)
-    : await mockProvider(text, excludeThesisId);
+  const p = getSetting('plagiarism_provider') || config.plagiarism.provider;
+  let result;
+  if (p === 'copyleaks') {
+    result = await copyleaksProvider(text, excludeThesisId, versionRef);
+  } else if (p === 'http') {
+    result = await httpProvider(text, excludeThesisId, versionRef);
+  } else {
+    result = await mockProvider(text, excludeThesisId);
+  }
   if (!Number.isFinite(result.similarityScore)) fail('INVALID_DOCUMENT', 'The similarity service returned an invalid result.', 502);
   const limit = threshold();
-  return { ...result, threshold: limit, passed: result.similarityScore < limit, tool: toolName() };
+  return { ...result, threshold: limit, passed: result.similarityScore < limit, tool: result.tool || toolName() };
 }
 
 export function recordCheck(thesisId, versionId, result) {

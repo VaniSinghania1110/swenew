@@ -138,28 +138,77 @@ export async function audit(main) {
 }
 
 // ---- Settings ----------------------------------------------------------------------
+// ---- Settings ----------------------------------------------------------------------
 export async function settings(main) {
   const { settings: s } = await api.get('/admin/settings');
   main.innerHTML = String(html`
-    <div class="page-head"><div><h1>Settings</h1><p>Institute-level configuration.</p></div></div>
+    <div class="page-head"><div><h1>Settings</h1><p>Institute-level configuration and plagiarism integration.</p></div></div>
     <div class="grid grid-2">
       <form class="card card-pad" data-settings novalidate><h2 style="margin-bottom:14px">Workflow rules</h2><div data-form-error hidden></div>
         ${field('plagiarism_threshold', 'Similarity threshold (%)', html`<input id="f-plagiarism_threshold" name="plagiarism_threshold" type="number" min="1" max="100" step="0.5" value="${s.plagiarism_threshold}">`, { required: true, help: 'Submissions at or above this score are flagged and withheld from review (BR-003).' })}
         ${field('institutional_domain', 'Institutional email domain', html`<input id="f-institutional_domain" name="institutional_domain" value="${s.institutional_domain}">`, { required: true, help: 'Scholar self-registration requires an email at this domain (FR-001).' })}
-        <button class="btn primary">Save settings</button></form>
-      <form class="card card-pad" data-dept novalidate><h2 style="margin-bottom:14px">Departments</h2><div data-form-error hidden></div>
+        <button class="btn primary">Save workflow settings</button></form>
+
+      <form class="card card-pad" data-copyleaks novalidate><h2 style="margin-bottom:14px">Plagiarism Checker (Copyleaks AI)</h2><div data-form-error hidden></div>
+        ${field('plagiarism_provider', 'Provider', html`<select id="f-plagiarism_provider" name="plagiarism_provider">
+          <option value="copyleaks" ${s.plagiarism_provider === 'copyleaks' ? 'selected' : ''}>Copyleaks AI &amp; Plagiarism Detection</option>
+          <option value="mock" ${s.plagiarism_provider === 'mock' ? 'selected' : ''}>Internal Corpus Stand-in (Mock)</option>
+        </select>`, { help: 'Automated check performed upon thesis submission.' })}
+        ${field('copyleaks_api_key', 'Copyleaks API Key', html`<input id="f-copyleaks_api_key" name="copyleaks_api_key" value="${s.copyleaks_api_key || 'ea2d3061-c76d-4fea-9f62-e91bab1c46ba'}">`, { required: true })}
+        ${field('copyleaks_email', 'Copyleaks Account Email', html`<input id="f-copyleaks_email" name="copyleaks_email" type="email" placeholder="e.g. your-email@domain.com" value="${s.copyleaks_email || ''}">`, { help: 'Required by Copyleaks v3 authentication along with the API key.' })}
+        <div class="field"><label class="check"><input type="checkbox" name="copyleaks_sandbox" value="true" ${s.copyleaks_sandbox === 'true' ? 'checked' : ''}>
+          <span>Enable Sandbox mode (free testing without consuming credits)</span></label></div>
+        <div class="row" style="margin-top:16px">
+          <button type="submit" class="btn primary">Save Copyleaks settings</button>
+          <button type="button" class="btn" data-test-copyleaks>Test API Connection</button>
+        </div>
+        <div data-test-result style="margin-top:12px" hidden></div>
+      </form>
+
+      <form class="card card-pad" data-dept novalidate style="grid-column:1 / -1"><h2 style="margin-bottom:14px">Departments</h2><div data-form-error hidden></div>
         <ul style="margin:0 0 16px;padding-left:18px">${state.meta.departments.map(d => html`<li>${d.name} <span class="muted small">(${d.code})</span></li>`)}</ul>
         <div class="fields-2">${field('code', 'Code', html`<input id="f-code" name="code" placeholder="e.g. CIV">`)}${field('name', 'Name', html`<input id="f-name" name="name" placeholder="e.g. Civil Engineering">`)}</div>
         <button class="btn">${icon('plus')} Add department</button></form>
     </div>`);
+
   $('[data-settings]', main).addEventListener('submit', async e => {
     e.preventDefault();
     try {
       await busy($('button', e.target), () => api.put('/admin/settings', Object.fromEntries(new FormData(e.target))));
       state.meta = await api.get('/meta');
-      toast('Settings saved.', 'ok');
+      toast('Workflow settings saved.', 'ok');
     } catch (err) { showErrors(e.target, err); }
   });
+
+  const copyleaksForm = $('[data-copyleaks]', main);
+  copyleaksForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    try {
+      const data = Object.fromEntries(new FormData(e.target));
+      data.copyleaks_sandbox = e.target.copyleaks_sandbox.checked ? 'true' : 'false';
+      await busy($('button[type=submit]', e.target), () => api.put('/admin/settings', data));
+      toast('Copyleaks settings saved.', 'ok');
+    } catch (err) { showErrors(e.target, err); }
+  });
+
+  $('[data-test-copyleaks]', copyleaksForm).addEventListener('click', async e => {
+    const resBox = $('[data-test-result]', copyleaksForm);
+    resBox.hidden = false;
+    resBox.innerHTML = '<span class="muted small">Testing connection to Copyleaks API…</span>';
+    try {
+      const email = copyleaksForm.copyleaks_email.value.trim();
+      const key = copyleaksForm.copyleaks_api_key.value.trim();
+      const res = await busy(e.currentTarget, () => api.post('/admin/plagiarism/test', { email, key }));
+      if (res.ok) {
+        resBox.innerHTML = String(html`<div class="alert ok">${icon('check')}<div><b>Connection successful!</b> ${res.message}</div></div>`);
+      } else {
+        resBox.innerHTML = String(html`<div class="alert warn">${icon('alert')}<div><b>Connection test:</b> ${res.message}</div></div>`);
+      }
+    } catch (err) {
+      resBox.innerHTML = String(html`<div class="alert bad">${icon('alert')}<div>${err.message}</div></div>`);
+    }
+  });
+
   $('[data-dept]', main).addEventListener('submit', async e => {
     e.preventDefault();
     try {

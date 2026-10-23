@@ -59,8 +59,21 @@ export function login(root) {
   form.email.focus();
 }
 
-export function register(root) {
-  const { departments, domain } = state.meta;
+export async function register(root) {
+  if (!state.meta?.departments?.length) {
+    try { state.meta = await api.get('/meta'); } catch { /* ignore */ }
+  }
+  const DEFAULT_DEPARTMENTS = [
+    { id: 1, code: 'CSE', name: 'Computer Science and Engineering' },
+    { id: 2, code: 'ECE', name: 'Electronics and Communication Engineering' },
+    { id: 3, code: 'CCE', name: 'Communication and Computer Engineering' },
+    { id: 4, code: 'ME', name: 'Mechanical-Mechatronics Engineering' },
+    { id: 5, code: 'PHY', name: 'Physics' },
+    { id: 6, code: 'MATH', name: 'Mathematics' },
+    { id: 7, code: 'HSS', name: 'Humanities and Social Sciences' },
+  ];
+  const departments = state.meta?.departments?.length ? state.meta.departments : DEFAULT_DEPARTMENTS;
+  const domain = state.meta?.domain || 'lnmiit.ac.in';
   root.innerHTML = String(html`<div class="auth">${art()}
     <section class="auth-form"><div class="card">
       <h2>Create scholar account</h2>

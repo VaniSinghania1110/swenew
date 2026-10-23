@@ -34,12 +34,30 @@ const matchList = d => d?.matches?.length ? html`<div style="margin-top:8px"><b>
 
 // UC-003 Submit Thesis — wireframe Figure 1.
 export async function submitForm(main, { id }) {
-  const { departments, degrees, threshold } = state.meta;
-  const u = state.user;
+  if (!state.meta?.departments?.length) {
+    try { state.meta = await api.get('/meta'); } catch { /* ignore */ }
+  }
+  const DEFAULT_DEPARTMENTS = [
+    { id: 1, code: 'CSE', name: 'Computer Science and Engineering' },
+    { id: 2, code: 'ECE', name: 'Electronics and Communication Engineering' },
+    { id: 3, code: 'CCE', name: 'Communication and Computer Engineering' },
+    { id: 4, code: 'ME', name: 'Mechanical-Mechatronics Engineering' },
+    { id: 5, code: 'PHY', name: 'Physics' },
+    { id: 6, code: 'MATH', name: 'Mathematics' },
+    { id: 7, code: 'HSS', name: 'Humanities and Social Sciences' },
+  ];
+  const departments = (state.meta?.departments && state.meta.departments.length > 0)
+    ? state.meta.departments
+    : DEFAULT_DEPARTMENTS;
+  const degrees = state.meta?.degrees || ['PhD', 'M.Tech', 'M.Sc', 'MS (Research)', 'B.Tech'];
+  const threshold = state.meta?.threshold || 20;
+
+  const u = state.user || {};
   const t = id ? (await api.get(`/theses/${id}`)).thesis : null;
   if (t && t.status !== 'Draft') return go(`/thesis/${t.id}`);
   const v = t || { department: { id: u.department_id }, degree: 'PhD', year: new Date().getFullYear() };
   const savedFile = t?.currentVersion;
+  const selectedDeptId = v.department?.id || v.department_id || u.department_id || (departments[0]?.id);
 
   main.innerHTML = String(html`
     <div class="crumbs"><a href="#/theses">My Theses</a> / ${t ? 'Edit draft' : 'New submission'}</div>
@@ -51,7 +69,7 @@ export async function submitForm(main, { id }) {
         ${field('title', 'Title', html`<input id="f-title" name="title" value="${v.title || ''}" maxlength="300">`, { required: true })}
         <div class="fields-2">
           ${field('author', 'Author', html`<input id="f-author" value="${u.name}" readonly>`, { help: 'Taken from your account.' })}
-          ${field('department_id', 'Department', html`<select id="f-department_id" name="department_id">${options(departments, v.department?.id, { blank: 'Select department…' })}</select>`, { required: true })}
+          ${field('department_id', 'Department', html`<select id="f-department_id" name="department_id">${options(departments, selectedDeptId, { blank: 'Select department…' })}</select>`, { required: true })}
         </div>
         <div class="fields-2">
           ${field('degree', 'Degree', html`<select id="f-degree" name="degree">${options(degrees, v.degree)}</select>`, { required: true })}

@@ -19,12 +19,14 @@ export const config = {
 
   maxUploadBytes: 50 * 1024 * 1024, // wireframe: "Maximum file size: 50 MB"
 
-  // FR-021: third-party similarity service adapter. "mock" is a development stand-in.
+  // FR-021: third-party similarity service adapter.
   plagiarism: {
-    provider: process.env.PLAGIARISM_PROVIDER || 'mock',
+    provider: process.env.PLAGIARISM_PROVIDER || 'copyleaks',
     apiUrl: process.env.PLAGIARISM_API_URL || '',
-    apiKey: process.env.PLAGIARISM_API_KEY || '',
-    timeoutMs: Number(process.env.PLAGIARISM_TIMEOUT_MS || 20000),
+    apiKey: process.env.PLAGIARISM_API_KEY || 'ea2d3061-c76d-4fea-9f62-e91bab1c46ba',
+    email: process.env.PLAGIARISM_EMAIL || '',
+    sandbox: process.env.PLAGIARISM_SANDBOX === 'true' || false,
+    timeoutMs: Number(process.env.PLAGIARISM_TIMEOUT_MS || 25000),
   },
 
   doiPrefix: process.env.DOI_PREFIX || '10.5555/lnmiit',

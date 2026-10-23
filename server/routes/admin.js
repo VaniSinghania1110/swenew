@@ -10,6 +10,7 @@ import { assignExaminer } from '../services/review.js';
 import { researchReport, publishedCsv } from '../services/reports.js';
 import { STATUS_LABELS } from '../services/workflow.js';
 import { DEGREES } from '../services/submission.js';
+import { testCopyleaksConnection } from '../services/plagiarism.js';
 import { publicUser } from './auth.js';
 
 const r = Router();
@@ -127,7 +128,15 @@ r.post('/admin/departments', admin, (req, res) => {
   res.status(201).json({ id });
 });
 
-r.get('/admin/settings', admin, (req, res) => res.json({ settings: Object.fromEntries(all('SELECT key, value FROM settings').map(s => [s.key, s.value])) }));
+r.get('/admin/settings', admin, (req, res) => res.json({
+  settings: {
+    ...Object.fromEntries(all('SELECT key, value FROM settings').map(s => [s.key, s.value])),
+    plagiarism_provider: getSetting('plagiarism_provider') || 'copyleaks',
+    copyleaks_api_key: getSetting('copyleaks_api_key') || 'ea2d3061-c76d-4fea-9f62-e91bab1c46ba',
+    copyleaks_email: getSetting('copyleaks_email') || '',
+    copyleaks_sandbox: getSetting('copyleaks_sandbox') || 'false',
+  }
+}));
 
 r.put('/admin/settings', admin, (req, res) => {
   const t = Number(req.body.plagiarism_threshold);
@@ -136,8 +145,23 @@ r.put('/admin/settings', admin, (req, res) => {
   if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(domain)) fail('INVALID_INPUT', 'Enter a valid email domain.', 422, { fields: { institutional_domain: 'e.g. lnmiit.ac.in' } });
   setSetting('plagiarism_threshold', t);
   setSetting('institutional_domain', domain);
-  audit(req.user.id, 'SETTINGS_CHANGED', 'settings', null, { plagiarism_threshold: t, institutional_domain: domain }, req.ip);
+
+  if (req.body.plagiarism_provider) setSetting('plagiarism_provider', req.body.plagiarism_provider);
+  if (req.body.copyleaks_api_key) setSetting('copyleaks_api_key', req.body.copyleaks_api_key.trim());
+  if (req.body.copyleaks_email !== undefined) setSetting('copyleaks_email', req.body.copyleaks_email.trim());
+  if (req.body.copyleaks_sandbox !== undefined) setSetting('copyleaks_sandbox', String(req.body.copyleaks_sandbox === 'true' || req.body.copyleaks_sandbox === true));
+
+  audit(req.user.id, 'SETTINGS_CHANGED', 'settings', null, {
+    plagiarism_threshold: t,
+    institutional_domain: domain,
+    plagiarism_provider: req.body.plagiarism_provider,
+  }, req.ip);
   res.json({ ok: true });
+});
+
+r.post('/admin/plagiarism/test', admin, async (req, res) => {
+  const result = await testCopyleaksConnection(req.body);
+  res.json(result);
 });
 
 // ---- Thesis oversight --------------------------------------------------------
