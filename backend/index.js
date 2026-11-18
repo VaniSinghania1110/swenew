@@ -54,6 +54,18 @@ if (isMain) {
   const server = config.tlsCert
     ? https.createServer({ key: fs.readFileSync(config.tlsKey), cert: fs.readFileSync(config.tlsCert) }, app)
     : http.createServer(app);
+
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`\n❌ Error: Port ${config.port} is already in use by another running server.`);
+      console.error(`👉 Stop the existing process, or run on another port (e.g. PORT=3001 npm start).\n`);
+      process.exit(1);
+    } else {
+      console.error('Server error:', err);
+      process.exit(1);
+    }
+  });
+
   server.listen(config.port, () => {
     console.log(`Thesis Vault running at ${config.tlsCert ? 'https' : 'http'}://localhost:${config.port}`);
   });

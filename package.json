@@ -3,11 +3,12 @@
   "version": "1.0.0",
   "description": "Thesis Vault: web-based digital thesis archive and management system (CS314, Team T054, LNMIIT)",
   "type": "module",
-  "main": "server/index.js",
+  "main": "backend/index.js",
   "scripts": {
-    "start": "node --disable-warning=ExperimentalWarning server/index.js",
-    "seed": "node --disable-warning=ExperimentalWarning server/db/seed.js",
-    "reset": "node --disable-warning=ExperimentalWarning server/db/seed.js --reset",
+    "start": "node --disable-warning=ExperimentalWarning backend/index.js",
+    "dev": "node --disable-warning=ExperimentalWarning --watch backend/index.js",
+    "seed": "node --disable-warning=ExperimentalWarning backend/db/seed.js",
+    "reset": "node --disable-warning=ExperimentalWarning backend/db/seed.js --reset",
     "test": "node --disable-warning=ExperimentalWarning --test tests/*.test.js"
   },
   "engines": {

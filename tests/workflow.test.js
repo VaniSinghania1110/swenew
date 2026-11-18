@@ -9,9 +9,9 @@ import path from 'node:path';
 process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'thesis-vault-test-'));
 process.env.JWT_SECRET = 'test-secret';
 
-const { app } = await import('../server/index.js');
-const { db, insert, one } = await import('../server/db/database.js');
-const { makePdf } = await import('../server/services/storage.js');
+const { app } = await import('../backend/index.js');
+const { db, insert, one } = await import('../backend/db/database.js');
+const { makePdf } = await import('../backend/services/storage.js');
 const bcrypt = (await import('bcryptjs')).default;
 
 let server, base;

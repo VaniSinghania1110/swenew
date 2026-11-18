@@ -1,7 +1,10 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const frontendDir = path.join(root, 'frontend');
+const defaultPublic = fs.existsSync(frontendDir) ? frontendDir : path.join(root, 'public');
 
 export const config = {
   root,
@@ -9,7 +12,7 @@ export const config = {
   dataDir: process.env.DATA_DIR || path.join(root, 'data'),
   get dbFile() { return path.join(this.dataDir, 'thesis-vault.db'); },
   get uploadDir() { return path.join(this.dataDir, 'uploads'); },
-  publicDir: path.join(root, 'public'),
+  publicDir: process.env.PUBLIC_DIR || defaultPublic,
 
   // NFR-003/NFR-004: secrets and TLS come from the environment in production.
   jwtSecret: process.env.JWT_SECRET || 'dev-only-secret-change-me',

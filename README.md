@@ -67,11 +67,17 @@ The API returns the error codes defined in the Lab 7 Software Interface Specific
 The system has separate frontend, backend and database layers (NFR-010). The backend modules map one-to-one to the components in the Lab 7 component diagram.
 
 ```
-public/                     Web UI / role-based portal (vanilla JS single-page app, no build step)
-  js/app.js                 router, role navigation, shell
-  js/views/*.js             scholar, review, catalogue, repository, admin, reports …
-server/
-  index.js                  Express app, security headers, optional HTTPS
+frontend/                   Web UI / role-based portal (vanilla JS single-page app, no build step)
+  index.html                HTML document shell
+  css/app.css               Styling, layout, themes (light/dark)
+  js/app.js                 Router, role navigation, shell layout
+  js/api.js                 REST API client wrapper
+  js/ui.js                  Reusable UI components and icons
+  js/views/*.js             Views for scholar, review, catalogue, repository, admin, reports, etc.
+backend/
+  index.js                  Express app, security headers, static serving, optional HTTPS
+  config.js                 Environment configuration and directory paths
+  errors.js                 Unified error handler and error code catalog
   routes/                   HTTP endpoints (auth, theses, library, admin)
   services/
     workflow.js             ThesisWorkflowService: state machine and access rules
@@ -79,12 +85,12 @@ server/
     review.js               Review & Approval Service: recordReview, annotations, examiner assignment
     catalogue.js            Cataloguing Service: completeCataloguing, publishToRepository
     plagiarism.js           Plagiarism Check Service: third-party adapter
-    storage.js              DocumentStorage: PDF validation, text extraction, file store
+    storage.js              DocumentStorage: PDF validation, text extraction, atomic file store
     history.js              History & Notification: audit log, thesis history, notifications
     search.js, reports.js   Repository search and research reports
-  db/schema.sql             tables, append-only triggers, FTS5 index
-  db/seed.js                demo data, created by driving the real services
-tests/workflow.test.js      integration tests for FRs and business rules
+  db/schema.sql             Tables, append-only triggers, FTS5 full-text index
+  db/seed.js                Demo data generator driving the real services
+tests/workflow.test.js      Integration tests for FRs and business rules
 ```
 
 Uploaded PDFs and the SQLite database live in `data/`, which git ignores.

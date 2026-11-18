@@ -2,15 +2,45 @@
 // entry is produced exactly as it would be in use.  Usage: npm run seed  |  npm run reset (wipe first)
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { config } from '../config.js';
 
-if (process.argv.includes('--reset')) {
-  fs.rmSync(config.dataDir, { recursive: true, force: true });
-  console.log('Existing data removed.');
+const isReset = process.argv.includes('--reset');
+
+if (isReset) {
+  try {
+    fs.rmSync(config.dataDir, { recursive: true, force: true });
+    console.log('Existing data removed.');
+  } catch {
+    // Windows/OneDrive lock handling: remove uploads files if possible
+    try {
+      if (fs.existsSync(config.uploadDir)) {
+        fs.rmSync(config.uploadDir, { recursive: true, force: true });
+      }
+    } catch {}
+  }
 }
 
 const { db, one, run, insert } = await import('./database.js');
-if (one('SELECT COUNT(*) AS n FROM users').n > 0) {
+
+if (isReset) {
+  // If the .db file is locked from file-level deletion by Windows/OneDrive, wipe tables cleanly
+  try {
+    db.exec('PRAGMA foreign_keys = OFF;');
+    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite_%'").all();
+    for (const { name } of tables) {
+      try { db.exec(`DROP TABLE IF EXISTS "${name}";`); } catch {}
+      try { db.exec(`DROP VIEW IF EXISTS "${name}";`); } catch {}
+    }
+    db.exec('PRAGMA foreign_keys = ON;');
+    const schemaSql = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'schema.sql'), 'utf8');
+    db.exec(schemaSql);
+  } catch (e) {
+    console.warn('Could not reset tables directly:', e.message);
+  }
+}
+
+if (!isReset && one('SELECT COUNT(*) AS n FROM users').n > 0) {
   console.log('Database already has users; run "npm run reset" to start from scratch.');
   process.exit(0);
 }
